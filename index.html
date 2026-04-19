@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Llamador Web</title>
+<script src="https://cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.4.1/dist/twilio.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .phone {
+      background: #ffffff;
+      border-radius: 24px;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.10);
+      width: 320px;
+      padding: 32px 28px 28px;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ccc;
+      transition: background 0.3s;
+    }
+    .status-dot.ready    { background: #22c55e; }
+    .status-dot.calling  { background: #f59e0b; animation: pulse 1s infinite; }
+    .status-dot.active   { background: #22c55e; animation: pulse 1s infinite; }
+    .status-dot.error    { background: #ef4444; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .status-text {
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    .display {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      min-height: 64px;
+      display: flex;
+      align-items: center;
+    }
+
+    #number-display {
+      font-size: 26px;
+      font-weight: 300;
+      color: #111827;
+      letter-spacing: 2px;
+      width: 100%;
+      border: none;
+      background: transparent;
+      outline: none;
+      text-align: center;
+    }
+
+    #number-display::placeholder { color: #d1d5db; font-size: 18px; }
+
+    .timer {
+      font-size: 13px;
+      color: #6b7280;
+      text-align: center;
+      height: 20px;
+      margin-bottom: 16px;
+    }
+
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .key {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 14px 8px;
+      font-size: 18px;
+      font-weight: 500;
+      color: #111827;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s, transform 0.1s;
+      user-select: none;
+    }
+
+    .key:hover  { background: #f3f4f6; }
+    .key:active { background: #e5e7eb; transform: scale(0.96); }
+
+    .key .sub {
+      display: block;
+      font-size: 9px;
+      font-weight: 400;
+      color: #9ca3af;
+      letter-spacing: 1px;
+      margin-top: 2px;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn-call {
+      background: #22c55e;
+      border: none;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      margin: 0 auto;
+      transition: background 0.2s, transform 0.1s;
+      grid-column: 2;
+    }
+
+    .btn-call:hover  { background: #16a34a; }
+    .btn-call:active { transform: scale(0.95); }
+    .btn-call.calling { background: #ef4444; }
+    .btn-call.calling:hover { background: #dc2626; }
+
+    .btn-call svg { width: 24px; height: 24px; fill: white; }
+
+    .btn-action {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin: auto;
+    }
+
+    .btn-action:hover { background: #f3f4f6; }
+    .btn-action svg { width: 18px; height: 18px; }
+
+    .btn-del { grid-column: 3; }
+    .btn-hash { }
+
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    #error-msg {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #b91c1c;
+      margin-top: 16px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="status-bar">
+    <div class="status-dot" id="dot"></div>
+    <span class="status-text" id="status-text">Iniciando...</span>
+  </div>
+
+  <div class="display">
+    <input id="number-display" type="tel" placeholder="+52 xxx xxx xxxx" maxlength="20" />
+  </div>
+
+  <div class="timer" id="timer"></div>
+
+  <div class="keypad">
+    <div class="key" data-key="1">1<span class="sub"> </span></div>
+    <div class="key" data-key="2">2<span class="sub">ABC</span></div>
+    <div class="key" data-key="3">3<span class="sub">DEF</span></div>
+    <div class="key" data-key="4">4<span class="sub">GHI</span></div>
+    <div class="key" data-key="5">5<span class="sub">JKL</span></div>
+    <div class="key" data-key="6">6<span class="sub">MNO</span></div>
+    <div class="key" data-key="7">7<span class="sub">PQRS</span></div>
+    <div class="key" data-key="8">8<span class="sub">TUV</span></div>
+    <div class="key" data-key="9">9<span class="sub">WXYZ</span></div>
+    <div class="key" data-key="*">*<span class="sub"> </span></div>
+    <div class="key" data-key="0">0<span class="sub">+</span></div>
+    <div class="key" data-key="#">#<span class="sub"> </span></div>
+  </div>
+
+  <div class="actions">
+    <div></div>
+    <button class="btn-call" id="btn-call" title="Llamar">
+      <svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
+    </button>
+    <button class="btn-action btn-del" id="btn-del" title="Borrar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path><line x1="18" y1="9" x2="12" y2="15"></line><line x1="12" y1="9" x2="18" y2="15"></line></svg>
+    </button>
+  </div>
+
+  <div id="error-msg"></div>
+</div>
+
+<script>
+  let device, activeCall, timerInterval, seconds = 0;
+
+  const dot       = document.getElementById('dot');
+  const statusTxt = document.getElementById('status-text');
+  const display   = document.getElementById('number-display');
+  const btnCall   = document.getElementById('btn-call');
+  const btnDel    = document.getElementById('btn-del');
+  const timerEl   = document.getElementById('timer');
+  const errorEl   = document.getElementById('error-msg');
+
+  function setStatus(state, text) {
+    dot.className = 'status-dot ' + state;
+    statusTxt.textContent = text;
+  }
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+    setTimeout(() => errorEl.style.display = 'none', 5000);
+  }
+
+  function startTimer() {
+    seconds = 0;
+    timerInterval = setInterval(() => {
+      seconds++;
+      const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+      const s = String(seconds % 60).padStart(2, '0');
+      timerEl.textContent = m + ':' + s;
+    }, 1000);
+  }
+
+  function stopTimer() {
+    clearInterval(timerInterval);
+    timerEl.textContent = '';
+  }
+
+  async function initDevice() {
+    try {
+      const res  = await fetch('/token');
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      device = new Twilio.Device(data.token, { logLevel: 1 });
+
+      device.on('ready', () => setStatus('ready', 'Listo para llamar'));
+      device.on('error', (err) => {
+        setStatus('error', 'Error');
+        showError('Error Twilio: ' + err.message);
+      });
+      device.on('connect', (call) => {
+        activeCall = call;
+        setStatus('active', 'En llamada');
+        btnCall.classList.add('calling');
+        btnCall.title = 'Colgar';
+        btnCall.innerHTML = `<svg viewBox="0 0 24 24" fill="white"><path d="M17.4 13.2c-2.8-1.4-5.1-3.8-6.6-6.6L13 4.4c.3-.3.4-.7.2-1-.4-1.1-.6-2.3-.6-3.6C12.6.2 12.2 0 12 0H8.5C8.2 0 8 .2 8 .5 8 9.9 15.6 17.5 25 17.5c.3 0 .5-.2.5-.5V13c0-.2-.2-.6-.5-.6-1.3 0-2.5-.2-3.6-.6-.3-.1-.7 0-1 .2l-3.2 3.2 .2-.8z" transform="rotate(135 12 12)"/></svg>`;
+        startTimer();
+      });
+      device.on('disconnect', () => {
+        activeCall = null;
+        setStatus('ready', 'Listo para llamar');
+        btnCall.classList.remove('calling');
+        btnCall.title = 'Llamar';
+        btnCall.innerHTML = `<svg viewBox="0 0 24 24" fill="white"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>`;
+        stopTimer();
+      });
+
+      device.register();
+
+    } catch (err) {
+      setStatus('error', 'Sin conexión');
+      showError('No se pudo conectar al servidor: ' + err.message);
+    }
+  }
+
+  document.querySelectorAll('.key').forEach(k => {
+    k.addEventListener('click', () => {
+      const val = k.dataset.key;
+      if (activeCall) {
+        activeCall.sendDigits(val);
+      } else {
+        display.value += val;
+      }
+    });
+  });
+
+  btnDel.addEventListener('click', () => {
+    display.value = display.value.slice(0, -1);
+  });
+
+  btnCall.addEventListener('click', async () => {
+    if (activeCall) {
+      activeCall.disconnect();
+      return;
+    }
+
+    const number = display.value.trim();
+    if (!number) { showError('Ingresa un número para llamar'); return; }
+    if (!device)  { showError('El dispositivo aún no está listo'); return; }
+
+    setStatus('calling', 'Llamando...');
+    try {
+      await device.connect({ params: { To: number } });
+    } catch (err) {
+      setStatus('ready', 'Listo para llamar');
+      showError('No se pudo iniciar la llamada: ' + err.message);
+    }
+  });
