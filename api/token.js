@@ -9,8 +9,8 @@ module.exports = function handler(req, res) {
   try {
     const token = new AccessToken(
       process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN,
-      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_API_KEY_SID,
+      process.env.TWILIO_API_KEY_SECRET,
       { identity: 'usuario', ttl: 3600 }
     );
 
