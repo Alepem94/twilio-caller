@@ -1,7 +1,0 @@
-{
-  "name": "twilio-web-caller",
-  "version": "1.0.0",
-  "dependencies": {
-    "twilio": "^5.0.0"
-  }
-}
